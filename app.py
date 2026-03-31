@@ -1,21 +1,21 @@
 import streamlit as st
-from pymongo import MongoClient
 
-# MongoDB connection
-MONGO_URI = "YOUR_MONGO_URI"
-client = MongoClient(MONGO_URI)
-db = client["appointment_db"]
+st.set_page_config(page_title="Appointment App", page_icon="📅")
 
-users_collection = db["users"]
-appointments_collection = db["appointments"]
+# Temporary storage
+if "users" not in st.session_state:
+    st.session_state.users = {}
+
+if "appointments" not in st.session_state:
+    st.session_state.appointments = []
+
+# Sidebar
+menu = st.sidebar.selectbox("Menu", ["Register", "Login", "Book Appointment", "View Appointments"])
 
 st.title("📅 Appointment Booking System")
 
-menu = ["Register", "Login", "Book Appointment", "View Appointments"]
-choice = st.sidebar.selectbox("Menu", menu)
-
-# ------------------ REGISTER ------------------
-if choice == "Register":
+# ---------------- REGISTER ----------------
+if menu == "Register":
     st.subheader("Create Account")
 
     name = st.text_input("Name")
@@ -23,66 +23,59 @@ if choice == "Register":
     password = st.text_input("Password", type="password")
 
     if st.button("Register"):
-        users_collection.insert_one({
-            "name": name,
-            "email": email,
-            "password": password
-        })
-        st.success("User registered successfully")
+        if email in st.session_state.users:
+            st.error("User already exists")
+        else:
+            st.session_state.users[email] = {
+                "name": name,
+                "password": password
+            }
+            st.success("Registered Successfully!")
 
-
-# ------------------ LOGIN ------------------
-elif choice == "Login":
+# ---------------- LOGIN ----------------
+elif menu == "Login":
     st.subheader("Login")
 
     email = st.text_input("Email")
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
-        user = users_collection.find_one({
-            "email": email,
-            "password": password
-        })
+        user = st.session_state.users.get(email)
 
-        if user:
-            st.success("Login successful")
+        if user and user["password"] == password:
+            st.session_state.logged_in = True
+            st.session_state.user_email = email
+            st.success("Login Successful!")
         else:
             st.error("Invalid credentials")
 
-
-# ------------------ BOOK APPOINTMENT ------------------
-elif choice == "Book Appointment":
-    st.subheader("Book Appointment")
-
-    name = st.text_input("Your Name")
-    date = st.date_input("Select Date")
-    time = st.selectbox("Select Time", ["10:00", "12:00", "14:00", "16:00"])
-
-    if st.button("Book Appointment"):
-        existing = appointments_collection.find_one({
-            "date": str(date),
-            "time": time
-        })
-
-        if existing:
-            st.error("Slot already booked")
-        else:
-            appointments_collection.insert_one({
-                "name": name,
-                "date": str(date),
-                "time": time
-            })
-            st.success("Appointment booked successfully")
-
-
-# ------------------ VIEW APPOINTMENTS ------------------
-elif choice == "View Appointments":
-    st.subheader("All Appointments")
-
-    data = list(appointments_collection.find({}, {"_id": 0}))
-
-    if len(data) == 0:
-        st.warning("No appointments found")
+# ---------------- BOOK APPOINTMENT ----------------
+elif menu == "Book Appointment":
+    if not st.session_state.get("logged_in"):
+        st.warning("Please login first")
     else:
-        for appt in data:
-            st.write(f"👤 {appt['name']} | 📅 {appt['date']} | ⏰ {appt['time']}")
+        st.subheader("Book Appointment")
+
+        date = st.date_input("Select Date")
+        time = st.time_input("Select Time")
+        reason = st.text_area("Reason")
+
+        if st.button("Book"):
+            st.session_state.appointments.append({
+                "email": st.session_state.user_email,
+                "date": str(date),
+                "time": str(time),
+                "reason": reason
+            })
+            st.success("Appointment Booked!")
+
+# ---------------- VIEW APPOINTMENTS ----------------
+elif menu == "View Appointments":
+    if not st.session_state.get("logged_in"):
+        st.warning("Please login first")
+    else:
+        st.subheader("Your Appointments")
+
+        for appt in st.session_state.appointments:
+            if appt["email"] == st.session_state.user_email:
+                st.write(f"📅 {appt['date']} ⏰ {appt['time']} - {appt['reason']}")
