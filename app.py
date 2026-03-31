@@ -1,7 +1,13 @@
 import streamlit as st
-import requests
+from pymongo import MongoClient
 
-API_URL = "http://127.0.0.1:5000"
+# MongoDB connection
+MONGO_URI = "YOUR_MONGO_URI"
+client = MongoClient(MONGO_URI)
+db = client["appointment_db"]
+
+users_collection = db["users"]
+appointments_collection = db["appointments"]
 
 st.title("📅 Appointment Booking System")
 
@@ -17,12 +23,12 @@ if choice == "Register":
     password = st.text_input("Password", type="password")
 
     if st.button("Register"):
-        res = requests.post(f"{API_URL}/register", json={
+        users_collection.insert_one({
             "name": name,
             "email": email,
             "password": password
         })
-        st.success(res.json()["message"])
+        st.success("User registered successfully")
 
 
 # ------------------ LOGIN ------------------
@@ -33,15 +39,15 @@ elif choice == "Login":
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
-        res = requests.post(f"{API_URL}/login", json={
+        user = users_collection.find_one({
             "email": email,
             "password": password
         })
 
-        if res.status_code == 200:
-            st.success(res.json()["message"])
+        if user:
+            st.success("Login successful")
         else:
-            st.error(res.json()["message"])
+            st.error("Invalid credentials")
 
 
 # ------------------ BOOK APPOINTMENT ------------------
@@ -53,24 +59,27 @@ elif choice == "Book Appointment":
     time = st.selectbox("Select Time", ["10:00", "12:00", "14:00", "16:00"])
 
     if st.button("Book Appointment"):
-        res = requests.post(f"{API_URL}/book", json={
-            "name": name,
+        existing = appointments_collection.find_one({
             "date": str(date),
             "time": time
         })
 
-        if res.status_code == 200:
-            st.success(res.json()["message"])
+        if existing:
+            st.error("Slot already booked")
         else:
-            st.error(res.json()["message"])
+            appointments_collection.insert_one({
+                "name": name,
+                "date": str(date),
+                "time": time
+            })
+            st.success("Appointment booked successfully")
 
 
 # ------------------ VIEW APPOINTMENTS ------------------
 elif choice == "View Appointments":
     st.subheader("All Appointments")
 
-    res = requests.get(f"{API_URL}/appointments")
-    data = res.json()
+    data = list(appointments_collection.find({}, {"_id": 0}))
 
     if len(data) == 0:
         st.warning("No appointments found")
